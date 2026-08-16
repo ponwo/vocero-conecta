@@ -130,7 +130,7 @@ genera los secretos y verifica el healthcheck.
 ### Ruta B — docker compose
 
 ```bash
-git clone https://github.com/kevinrivm/vocero-crm.git vocero && cd vocero
+git clone https://github.com/ponwo/vocero-conecta.git vocero && cd vocero
 cp .env.example .env    # rellena: dominio + secretos (cada uno trae su comando openssl)
 docker compose up -d --build
 ```
