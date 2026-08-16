@@ -20,6 +20,13 @@ services:
       OPENROUTER_JUDGE_MODEL: ${OPENROUTER_JUDGE_MODEL:-}
       ALLOW_SIGNUP: ${ALLOW_SIGNUP:-}
       AGENT_COALESCE_MS: ${AGENT_COALESCE_MS:-6000}
+      BOT_API_KEY: ${BOT_API_KEY:-}
+      # 008: los adjuntos viven en el volumen, no en el filesystem efímero del
+      # contenedor — sin esto, MEDIA_DIR cae en su default relativo y cada
+      # `up --build` borra imágenes, audios y documentos ya recibidos.
+      MEDIA_DIR: /data/media
+    volumes:
+      - vocero_media:/data/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,5 +69,6 @@ services:
 
 volumes:
   vocero_pg:
+  vocero_media:
   vocero_caddy_data:
   vocero_caddy_config:

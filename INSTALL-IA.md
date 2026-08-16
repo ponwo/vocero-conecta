@@ -47,8 +47,14 @@
 | `META_GRAPH_API_VERSION` | `v25.0` |
 | `OPENROUTER_API_TOKEN` | del usuario (si lo dio) |
 | `OPENROUTER_MODEL` | si hay token: sugiere `anthropic/claude-sonnet-4.5` u otro a elección |
+| `MEDIA_DIR` | `/data/media` — debe apuntar al volumen persistente de adjuntos |
 
 `DOMAIN` solo aplica en la Ruta B (para Caddy).
+
+**Adjuntos**: las imágenes, audios y documentos que llegan por WhatsApp se
+guardan en disco (`MEDIA_DIR`, sin S3/R2 — constitución II). Si esa ruta no es un
+volumen persistente, cada redeploy los borra **sin ningún error visible**: la
+conversación queda con los adjuntos rotos. Monta el volumen en ambas rutas.
 
 ## Ruta A — Coolify (con el MCP de Coolify)
 
@@ -61,11 +67,19 @@
    keys. Asigna el dominio del usuario con HTTPS.
 3. **Variables**: configura las variables de la tabla en la app (runtime, no
    build). `DATABASE_URL` apunta al host interno del paso 1.
-4. **Sin Pre-Deployment Command**: las migraciones corren solas al arrancar el
+4. **Volumen de adjuntos**: agrega un *persistent storage* montado en
+   `/data/media` (el `Dockerfile` ya crea esa ruta con el dueño correcto) y deja
+   `MEDIA_DIR=/data/media`. Sin esto los adjuntos se pierden en cada redeploy.
+5. **Healthcheck — `127.0.0.1`, NO `localhost`**: Coolify no detecta el
+   `HEALTHCHECK` del `Dockerfile` y genera el suyo; en su configuración pon
+   *Health Check Host* = `127.0.0.1`, path `/api/health`, puerto `3000`,
+   start-period ≥ 60s. Con el default `localhost` el deploy **falla siempre**
+   (ver Diagnóstico).
+6. **Sin Pre-Deployment Command**: las migraciones corren solas al arrancar el
    contenedor (`node migrate.mjs && node server.js`).
-5. **Despliega** y espera el healthcheck verde (`/api/health`; el start-period
+7. **Despliega** y espera el healthcheck verde (`/api/health`; el start-period
    cubre las migraciones).
-6. **Verifica**: `https://<dominio>/api/health` responde `{"ok":true}` y
+8. **Verifica**: `https://<dominio>/api/health` responde `{"ok":true}` y
    `https://<dominio>/login` carga.
 
 ## Ruta B — docker compose (VPS con Docker)
@@ -78,6 +92,8 @@ docker compose up -d --build
 ```
 
 - Caddy emite el certificado HTTPS automáticamente con `DOMAIN`.
+- El `docker-compose.yml` ya monta el volumen `vocero_media` en `/data/media` y
+  fija `MEDIA_DIR` — no hay que tocar nada para los adjuntos.
 - Verifica: `docker compose ps` (tres servicios healthy) y
   `https://<dominio>/api/health` → `{"ok":true}`.
 
@@ -96,6 +112,14 @@ docker compose up -d --build
 
 ## Diagnóstico rápido
 
+- **Deploy que falla con `wget: can't connect to remote host: Connection refused`
+  mientras los logs del contenedor dicen `✓ Ready`** → el healthcheck apunta a
+  `localhost`, que resuelve primero a `::1`, pero Next.js standalone arranca con
+  `HOSTNAME=0.0.0.0` y solo escucha IPv4. Cambia *Health Check Host* a
+  `127.0.0.1`. El `/bin/sh: curl: not found` que aparece en el mismo log es
+  ruido: la imagen alpine trae `wget` de busybox y Coolify hace fallback solo.
+- **Adjuntos que desaparecen tras un redeploy** → falta el volumen persistente en
+  `/data/media` o `MEDIA_DIR` no apunta ahí. No emite ningún error.
 - App unhealthy al arrancar → revisa logs del contenedor: casi siempre es una
   variable faltante (la validación de entorno lista cuál) o la BD inaccesible.
 - `ENCRYPTION_KEY` inválida → debe ser EXACTAMENTE 32 bytes en base64
